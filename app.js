@@ -200,7 +200,7 @@ function buildQuery() {
   }
   conds.push(`[회사] = '시디즈'`);
   conds.push(`[브랜드] = '시디즈'`);
-  conds.push(`[${dateType}] BETWEEN '${startDate}' AND '${endDate}'`);
+  conds.push(`[${dateType}] >= '${startDate}' AND [${dateType}] < DATEADD(day, 1, '${endDate}')`);
 
   // WHERE — user conditions
   WHERE_COLUMNS.forEach(col => {
