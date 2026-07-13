@@ -10,7 +10,10 @@ const WHERE_COLUMNS = [
   { name: '실적사업소',   type: 'dropdown', multi: true, options: ['광주권역','광주사업소','남부권역(A)','남부권역(B)','남부사업소','대구권역','대구사업소','대리점기타','대전권역','대전사업소','동부권역(A)','동부권역(B)','동부사업소','매장운영사업소','본사계약','부산권역','북동권역','북부사업소','북서권역','사업개발A','사업개발B','서부권역','서부사업소','온라인','자사몰사업소','중부권역','폐쇄몰사업소','플래그십사업소'] },
   { name: '실적대리점',   type: 'like' },
   { name: '수주건명',     type: 'like' },
-  { name: '수주건구분',   type: 'dropdown', multi: true,  options: ['일반수주', '견적수주', '프로젝트수주'] },
+  { name: '수주건구분',   type: 'dropdown', multi: true,  options: [
+    { label: 'B2C', values: ['OAF01', 'OAF03'], includeNull: true },
+    { label: 'B2B', values: ['OAF02'] },
+  ] },
   { name: '사업자번호',   type: 'eq' },
   { name: '세트코드',     type: 'eq' },
   { name: '세트코드색상', type: 'eq' },
@@ -131,7 +134,10 @@ function buildInputHTML(col) {
   }
   if (col.type === 'dropdown') {
     const chips = col.options
-      .map(o => `<span class="chip" data-val="${o}">${o}</span>`)
+      .map(o => {
+        const label = typeof o === 'string' ? o : o.label;
+        return `<span class="chip" data-val="${label}">${label}</span>`;
+      })
       .join('');
     return `<div class="chip-group">${chips}</div>`;
   }
@@ -179,6 +185,36 @@ function attachInputListeners(col, body, cond) {
 // ─────────────────────────────────────────────
 // Query builder
 // ─────────────────────────────────────────────
+function buildDropdownCondition(col, cond) {
+  if (!cond.selected.length) return null;
+
+  const orParts = [];
+  cond.selected.forEach(key => {
+    const opt = col.options.find(o => (typeof o === 'string' ? o : o.label) === key);
+    if (!opt) return;
+
+    if (typeof opt === 'string') {
+      orParts.push(`[${col.name}] = '${opt}'`);
+      return;
+    }
+
+    const subParts = [];
+    if (opt.values && opt.values.length === 1) {
+      subParts.push(`[${col.name}] = '${opt.values[0]}'`);
+    } else if (opt.values && opt.values.length > 1) {
+      subParts.push(`[${col.name}] IN (${opt.values.map(v => `'${v}'`).join(', ')})`);
+    }
+    if (opt.includeNull) subParts.push(`[${col.name}] IS NULL`);
+
+    if (subParts.length === 1) orParts.push(subParts[0]);
+    else if (subParts.length > 1) orParts.push(`(${subParts.join(' OR ')})`);
+  });
+
+  if (!orParts.length) return null;
+  if (orParts.length === 1) return orParts[0];
+  return `(${orParts.join(' OR ')})`;
+}
+
 function buildQuery() {
   const { gubun, dateType, startDate, endDate } = state;
   if (!startDate || !endDate) return null;
@@ -240,12 +276,8 @@ function buildQuery() {
         conds.push(`[${col.name}] <= ${cond.max}`);
       }
     } else if (col.type === 'dropdown') {
-      if (cond.selected.length === 1) {
-        conds.push(`[${col.name}] = '${cond.selected[0]}'`);
-      } else if (cond.selected.length > 1) {
-        const vals = cond.selected.map(v => `'${v}'`).join(', ');
-        conds.push(`[${col.name}] IN (${vals})`);
-      }
+      const dropdownCond = buildDropdownCondition(col, cond);
+      if (dropdownCond) conds.push(dropdownCond);
     }
   });
 
